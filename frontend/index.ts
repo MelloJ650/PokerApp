@@ -1,0 +1,705 @@
+// // This is a bundled and compiled TypeScript module. 
+// // In a real project, this would be multiple .ts files processed by a build tool like tsc or esbuild.
+
+// // ===================================
+// //          CONSTANTS & ENUMS
+// // ===================================
+
+// const API_BASE_URL = `${window.location.protocol}//${window.location.host}`;
+// const WS_BASE_URL = `ws://${window.location.host}`;
+
+// const SUITS = { 'H': '♥', 'D': '♦', 'C': '♣', 'S': '♠' };
+// const SUIT_COLORS = { 'H': 'red', 'D': 'red', 'C': 'black', 'S': 'black' };
+// const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+
+// // ===================================
+// //          STATE MANAGEMENT
+// // ===================================
+
+// class AppState {
+//   constructor() {
+//     this.token = localStorage.getItem('poker_token');
+//     this.userId = localStorage.getItem('poker_userId');
+//     this.username = localStorage.getItem('poker_username');
+//     this.currentView = this.token ? 'lobby' : 'auth';
+//     this.currentGameId = null;
+//   }
+
+//   login(token, user) {
+//     this.token = token;
+//     this.userId = user.id;
+//     this.username = user.username;
+//     localStorage.setItem('poker_token', token);
+//     localStorage.setItem('poker_userId', user.id);
+//     localStorage.setItem('poker_username', user.username);
+//   }
+
+//   logout() {
+//     this.token = null;
+//     this.userId = null;
+//     this.username = null;
+//     localStorage.removeItem('poker_token');
+//     localStorage.removeItem('poker_userId');
+//     localStorage.removeItem('poker_username');
+//     this.currentView = 'auth';
+//   }
+// }
+// const state = new AppState();
+
+// // ===================================
+// //        WEBSOCKET SERVICE
+// // ===================================
+
+// class WebSocketService {
+//   constructor() {
+//     this.ws = null;
+//   }
+
+//   connect(url, onMessage) {
+//     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+//       this.ws.close();
+//     }
+//     this.ws = new WebSocket(url);
+//     this.ws.onopen = () => console.log(`WebSocket connected to ${url}`);
+//     this.ws.onmessage = onMessage;
+//     this.ws.onerror = (error) => console.error('WebSocket Error:', error);
+//     this.ws.onclose = () => console.log(`WebSocket disconnected from ${url}`);
+//   }
+
+//   sendMessage(data) {
+//     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+//       this.ws.send(JSON.stringify(data));
+//     } else {
+//       console.error('WebSocket is not connected.');
+//     }
+//   }
+
+//   close() {
+//     if (this.ws) {
+//       this.ws.close();
+//       this.ws = null;
+//     }
+//   }
+// }
+// const lobbySocket = new WebSocketService();
+// const gameSocket = new WebSocketService();
+
+// // ===================================
+// //        UI CONTROLLER / RENDERER
+// // ===================================
+
+// class UIController {
+//   constructor() {
+//     this.elements = {
+//       app: document.getElementById('app'),
+//       authView: document.getElementById('auth-view'),
+//       lobbyView: document.getElementById('lobby-view'),
+//       gameView: document.getElementById('game-view'),
+//       profileView: document.getElementById('profile-view'),
+//       modal: document.getElementById('modal'),
+//     };
+//   }
+
+//   switchView(view) {
+//     Object.values(this.elements).forEach(v => v.classList.add('hidden'));
+//     if (this.elements[view]) {
+//       this.elements[view].classList.remove('hidden');
+//     } else {
+//       this.elements.app.classList.remove('hidden');
+//       this.elements[view.split('-')[0] + 'View'].classList.remove('hidden');
+//     }
+//     state.currentView = view;
+//   }
+
+//   renderCard(cardStr, isBack = false) {
+//     if (isBack) {
+//       return `<div class="card back"></div>`;
+//     }
+//     if (!cardStr) return `<div class="card bg-zinc-700"></div>`;
+
+//     const rank = cardStr.slice(0, -1);
+//     const suit = cardStr.slice(-1);
+//     const colorClass = SUIT_COLORS[suit] === 'red' ? 'red' : '';
+//     return `
+//                     <div class="card ${colorClass}">
+//                         <span class="card-suit-top">${SUITS[suit]}</span>
+//                         ${rank}
+//                         <span class="card-suit-bottom">${SUITS[suit]}</span>
+//                     </div>`;
+//   }
+
+//   renderLogin() {
+//     document.getElementById('auth-form-container').innerHTML = `
+//                     <h2 class="text-2xl font-semibold text-center mb-4">Login</h2>
+//                     <form id="login-form">
+//                         <input id="login-username" type="text" placeholder="Username" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
+//                         <input id="login-password" type="password" placeholder="Password" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
+//                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded">Login</button>
+//                     </form>
+//                     <p class="text-center mt-4 text-sm text-zinc-400">
+//                         No account? <a href="#" id="show-register" class="text-indigo-400 hover:underline">Register here</a>
+//                     </p>
+//                 `;
+//   }
+
+//   renderRegister() {
+//     document.getElementById('auth-form-container').innerHTML = `
+//                     <h2 class="text-2xl font-semibold text-center mb-4">Register</h2>
+//                     <form id="register-form">
+//                         <input id="register-username" type="text" placeholder="Username" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
+//                         <input id="register-password" type="password" placeholder="Password" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
+//                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded">Register</button>
+//                     </form>
+//                     <p class="text-center mt-4 text-sm text-zinc-400">
+//                         Already have an account? <a href="#" id="show-login" class="text-indigo-400 hover:underline">Login here</a>
+//                     </p>
+//                 `;
+//   }
+
+//   updateLobby(games) {
+//     const gameList = document.getElementById('game-list');
+//     document.getElementById('lobby-username').textContent = `Welcome, ${state.username}`;
+//     if (games.length === 0) {
+//       gameList.innerHTML = `<p class="text-zinc-400 text-center">No active games. Why not create one?</p>`;
+//       return;
+//     }
+//     gameList.innerHTML = games.map(game => `
+//                     <div class="flex justify-between items-center bg-zinc-800 p-4 rounded-lg">
+//                         <div>
+//                             <p class="font-bold">Game #${game.id.slice(0, 8)}</p>
+//                             <p class="text-sm text-zinc-400">Buy-in: ${game.buy_in} chips</p>
+//                         </div>
+//                         <div>
+//                             <span class="text-sm font-semibold">${game.player_count}/${game.max_players} players</span>
+//                             ${game.player_count < game.max_players ?
+//         `<button data-game-id="${game.id}" class="join-game-btn ml-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Join</button>` :
+//         `<span class="ml-4 text-sm text-red-500">Full</span>`
+//       }
+//                         </div>
+//                     </div>
+//                 `).join('');
+//   }
+
+//   updateGameState(gameState) {
+//     console.log("Updating game state:", gameState);
+//     state.currentGameId = gameState.id;
+//     document.getElementById('game-user-id').textContent = state.userId;
+
+//     // Update Pot
+//     document.getElementById('pot-amount').textContent = gameState.current_pot;
+
+//     // Update Community Cards
+//     const communityCardsDiv = document.getElementById('community-cards');
+//     let cardsHTML = '';
+//     for (let i = 0; i < 5; i++) {
+//       cardsHTML += this.renderCard(gameState.community_cards[i]);
+//     }
+//     communityCardsDiv.innerHTML = cardsHTML;
+
+//     // Update Players
+//     const playerPositionsDiv = document.getElementById('player-positions');
+//     playerPositionsDiv.innerHTML = '';
+//     const numPlayers = gameState.players.length;
+//     gameState.players.forEach((player, index) => {
+//       const angle = (index / numPlayers) * 2 * Math.PI;
+//       const x = 50 + 45 * Math.cos(angle);
+//       const y = 50 + 40 * Math.sin(angle);
+
+//       const isCurrentUser = player.user_id === state.userId;
+//       const isCurrentTurn = player.user_id === gameState.current_turn_player_id;
+//       const hasFolded = player.folded_status;
+
+//       let dealerChip = '';
+//       if (player.user_id === gameState.dealer_id) dealerChip = `<div class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-white text-black flex items-center justify-center font-bold text-xs">D</div>`;
+
+//       let blindChip = '';
+//       if (player.user_id === gameState.small_blind_id) blindChip = `<div class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-400 text-black flex items-center justify-center font-bold text-xs">SB</div>`;
+//       if (player.user_id === gameState.big_blind_id) blindChip = `<div class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-gray-600 text-white flex items-center justify-center font-bold text-xs">BB</div>`;
+
+//       const playerDiv = document.createElement('div');
+//       playerDiv.className = `absolute text-center p-3 rounded-lg w-40 transition-all duration-300 ${isCurrentTurn ? 'bg-yellow-500/20 ring-2 ring-yellow-400' : 'bg-black/30'} ${hasFolded ? 'opacity-50' : ''}`;
+//       playerDiv.style.left = `calc(${x}% - 5rem)`;
+//       playerDiv.style.top = `calc(${y}% - 4rem)`;
+
+//       playerDiv.innerHTML = `
+//                         ${dealerChip || blindChip}
+//                         <p class="font-bold text-white truncate">${player.username}</p>
+//                         <p class="text-amber-300 font-semibold">${player.chips_in_hand}</p>
+//                         <div class="flex justify-center space-x-1 mt-2">
+//                             ${this.renderCard(player.hole_cards[0], !isCurrentUser && !gameState.showdown_active)}
+//                             ${this.renderCard(player.hole_cards[1], !isCurrentUser && !gameState.showdown_active)}
+//                         </div>
+//                         ${player.current_bet > 0 ? `<div class="mt-2 text-sm text-white">Bet: ${player.current_bet}</div>` : ''}
+//                         ${player.last_action ? `<div class="mt-1 text-xs uppercase font-bold text-cyan-300">${player.last_action}</div>` : ''}
+//                     `;
+//       playerPositionsDiv.appendChild(playerDiv);
+
+//       if (isCurrentUser) {
+//         this.updateHandInfo(player.hole_cards, gameState.community_cards, gameState.players.length);
+//         this.updateActionControls(gameState, player);
+//       }
+//     });
+
+//     if (gameState.last_event) {
+//       this.showModal(gameState.last_event.title, `<p>${gameState.last_event.message}</p>`, [{ text: 'OK' }]);
+//     }
+//   }
+
+//   updateHandInfo(holeCards, communityCards, numPlayers) {
+//     const myHandDiv = document.getElementById('my-hand-cards');
+//     myHandDiv.innerHTML = this.renderCard(holeCards[0]) + this.renderCard(holeCards[1]);
+
+//     if (communityCards.length >= 3) {
+//       const result = HandEvaluator.evaluate(holeCards.concat(communityCards));
+//       document.getElementById('best-hand-name').textContent = result.name;
+
+//       const outs = OddsCalculator.calculateOuts(holeCards, communityCards);
+//       const remainingCards = 52 - 2 - communityCards.length;
+//       let probability = 0;
+//       if (communityCards.length === 3) { // Flop
+//         probability = ((outs / remainingCards) + (outs / (remainingCards - 1))) - ((outs / remainingCards) * (outs / (remainingCards - 1)));
+//       } else if (communityCards.length === 4) { // Turn
+//         probability = outs / remainingCards;
+//       }
+
+//       document.getElementById('hand-outs-count').textContent = outs.count;
+//       document.getElementById('hand-probability').textContent = `${(probability * 100).toFixed(1)}%`;
+//     } else {
+//       document.getElementById('best-hand-name').textContent = '-';
+//       document.getElementById('hand-outs-count').textContent = '-';
+//       document.getElementById('hand-probability').textContent = '-';
+//     }
+//   }
+
+//   updateActionControls(gameState, player) {
+//     const controlsDiv = document.getElementById('action-controls');
+//     if (player.user_id !== gameState.current_turn_player_id || gameState.showdown_active) {
+//       controlsDiv.innerHTML = '<p class="text-zinc-400 text-center">Waiting for your turn...</p>';
+//       return;
+//     }
+
+//     const canCheck = player.current_bet === gameState.current_bet;
+//     const toCall = gameState.current_bet - player.current_bet;
+
+//     controlsDiv.innerHTML = `
+//                     <button id="fold-btn" class="action-btn bg-red-700 hover:bg-red-800 text-white font-bold py-3 px-6 rounded">Fold</button>
+//                     <button id="check-call-btn" class="action-btn bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded">
+//                         ${canCheck ? 'Check' : `Call ${toCall}`}
+//                     </button>
+//                     <div class="inline-block">
+//                         <input id="raise-amount" type="number" min="${gameState.current_bet + gameState.min_raise}" max="${player.chips_in_hand}" value="${gameState.current_bet + gameState.min_raise}" class="bg-zinc-800 border border-zinc-700 p-3 rounded w-32 text-center">
+//                         <button id="raise-btn" class="action-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded">Raise</button>
+//                     </div>
+//                     <button id="all-in-btn" class="action-btn bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded">All-in (${player.chips_in_hand})</button>
+//                 `;
+//   }
+
+//   showModal(title, bodyHTML, actions = []) {
+//     document.getElementById('modal-title').textContent = title;
+//     document.getElementById('modal-body').innerHTML = bodyHTML;
+//     const actionsContainer = document.getElementById('modal-actions');
+//     actionsContainer.innerHTML = '';
+
+//     if (actions.length === 0) {
+//       actions.push({ text: 'Close', primary: true, handler: () => this.hideModal() });
+//     }
+
+//     actions.forEach(action => {
+//       const button = document.createElement('button');
+//       button.textContent = action.text;
+//       button.className = action.primary
+//         ? 'bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded'
+//         : 'bg-zinc-600 hover:bg-zinc-700 text-white font-bold py-2 px-4 rounded';
+//       button.onclick = () => {
+//         if (action.handler) action.handler();
+//         else this.hideModal();
+//       };
+//       actionsContainer.appendChild(button);
+//     });
+
+//     this.elements.modal.classList.remove('hidden');
+//   }
+
+//   hideModal() {
+//     this.elements.modal.classList.add('hidden');
+//   }
+
+//   showCreateGameModal() {
+//     this.showModal(
+//       'Create New Game',
+//       `
+//                         <div class="space-y-4">
+//                             <div>
+//                                 <label class="block mb-1 text-sm font-medium text-zinc-300">Max Players</label>
+//                                 <select id="create-game-max-players" class="w-full p-2 bg-zinc-800 border border-zinc-700 rounded">
+//                                     <option>2</option><option>4</option><option selected>6</option><option>8</option>
+//                                 </select>
+//                             </div>
+//                              <div>
+//                                 <label class="block mb-1 text-sm font-medium text-zinc-300">Buy-in</label>
+//                                 <input id="create-game-buy-in" type="number" value="1000" min="100" step="100" class="w-full p-2 bg-zinc-800 border border-zinc-700 rounded">
+//                             </div>
+//                         </div>
+//                     `,
+//       [
+//         { text: 'Cancel', handler: () => this.hideModal() },
+//         {
+//           text: 'Create Game', primary: true, handler: () => {
+//             const max_players = document.getElementById('create-game-max-players').value;
+//             const buy_in = document.getElementById('create-game-buy-in').value;
+//             api.createGame(parseInt(max_players), parseInt(buy_in));
+//             this.hideModal();
+//           }
+//         }
+//       ]
+//     );
+//   }
+
+//   showProfile(user) {
+//     document.getElementById('profile-username').textContent = user.username;
+//     document.getElementById('profile-chips').textContent = user.current_chips;
+//     document.getElementById('profile-hands-played').textContent = user.total_hands_played;
+//     document.getElementById('profile-total-won').textContent = user.total_won;
+//     document.getElementById('profile-total-lost').textContent = user.total_lost;
+//     document.getElementById('profile-user-id').textContent = user.id;
+
+//     const ctx = document.getElementById('stats-chart').getContext('2d');
+//     new Chart(ctx, {
+//       type: 'line',
+//       data: {
+//         labels: ['Start', 'Current'], // Placeholder, would be populated by game history data
+//         datasets: [{
+//           label: 'Chip History',
+//           data: [user.total_won - user.total_lost > 0 ? 0 : user.total_won - user.total_lost, user.current_chips], // Simplified
+//           borderColor: '#4f46e5',
+//           tension: 0.1
+//         }]
+//       },
+//       options: {
+//         responsive: true,
+//         scales: {
+//           y: { beginAtZero: false }
+//         }
+//       }
+//     });
+
+//     this.elements.profileView.classList.remove('hidden');
+//   }
+
+//   hideProfile() {
+//     this.elements.profileView.classList.add('hidden');
+//   }
+// }
+// const ui = new UIController();
+
+// // ===================================
+// //        API SERVICE
+// // ===================================
+
+// class ApiService {
+//   async _fetch(url, options = {}) {
+//     options.headers = { 'Content-Type': 'application/json', ...options.headers };
+//     if (state.token) {
+//       options.headers['Authorization'] = `Bearer ${state.token}`;
+//     }
+//     const response = await fetch(API_BASE_URL + url, options);
+//     if (!response.ok) {
+//       const error = await response.json();
+//       throw new Error(error.detail || 'An API error occurred');
+//     }
+//     return response.json();
+//   }
+
+//   async register(username, password) {
+//     return this._fetch('/api/register', {
+//       method: 'POST',
+//       body: JSON.stringify({ username, password }),
+//     });
+//   }
+
+//   async login(username, password) {
+//     return this._fetch('/api/login', {
+//       method: 'POST',
+//       body: JSON.stringify({ username, password }),
+//     });
+//   }
+
+//   async getProfile() {
+//     if (!state.userId) return;
+//     return this._fetch(`/api/profile/${state.userId}`);
+//   }
+
+//   async getGames() {
+//     return this._fetch('/api/games');
+//   }
+
+//   async createGame(max_players, buy_in) {
+//     return this._fetch('/api/games', {
+//       method: 'POST',
+//       body: JSON.stringify({ max_players, buy_in }),
+//     });
+//   }
+// }
+// const api = new ApiService();
+
+// // ===================================
+// // POKER LOGIC (CLIENT-SIDE HELPERS)
+// // ===================================
+
+// const HandEvaluator = {
+//   // Simplified version for client display, full logic is on backend
+//   RANK_ORDER: '23456789TJQKA',
+//   HAND_RANKS: {
+//     10: "Royal Flush", 9: "Straight Flush", 8: "Four of a Kind", 7: "Full House",
+//     6: "Flush", 5: "Straight", 4: "Three of a Kind", 3: "Two Pair",
+//     2: "One Pair", 1: "High Card"
+//   },
+
+//   getRankValue(card) { return this.RANK_ORDER.indexOf(card[0]); },
+//   getSuit(card) { return card[1]; },
+
+//   evaluate(cards) {
+//     if (!cards || cards.length < 5) return { name: "Not enough cards", rank: 0, value: 0 };
+//     const combinations = this.getCombinations(cards, 5);
+//     let bestHand = { rank: 0, value: 0, name: "High Card", cards: [] };
+
+//     for (const combo of combinations) {
+//       const evalResult = this.evaluate5(combo);
+//       if (evalResult.rank > bestHand.rank || (evalResult.rank === bestHand.rank && evalResult.value > bestHand.value)) {
+//         bestHand = { ...evalResult, cards: combo };
+//       }
+//     }
+//     return bestHand;
+//   },
+
+//   evaluate5(hand) { // Hand is always 5 cards
+//     const ranks = hand.map(c => this.getRankValue(c)).sort((a, b) => b - a);
+//     const suits = hand.map(c => this.getSuit(c));
+//     const isFlush = suits.every(s => s === suits[0]);
+//     const rankCounts = ranks.reduce((acc, r) => { acc[r] = (acc[r] || 0) + 1; return acc; }, {});
+//     const counts = Object.values(rankCounts).sort((a, b) => b - a);
+//     const isStraight = ranks[0] - ranks[4] === 4 && new Set(ranks).size === 5;
+//     const isAceLowStraight = ranks.join('') === '12,3,2,1,0';
+
+//     let rank = 1, value = this.getHandValue(ranks); // High Card
+//     if (isStraight || isAceLowStraight) {
+//       rank = 5;
+//       if (isAceLowStraight) value = this.getHandValue([3, 2, 1, 0, -1]); // 5 high
+//       if (isFlush) rank = isAceLowStraight ? 9 : (ranks[0] === 12 ? 10 : 9); // Straight/Royal Flush
+//     } else if (isFlush) {
+//       rank = 6;
+//     } else if (counts[0] === 4) {
+//       rank = 8;
+//     } else if (counts[0] === 3 && counts[1] === 2) {
+//       rank = 7;
+//     } else if (counts[0] === 3) {
+//       rank = 4;
+//     } else if (counts[0] === 2 && counts[1] === 2) {
+//       rank = 3;
+//     } else if (counts[0] === 2) {
+//       rank = 2;
+//     }
+//     return { name: this.HAND_RANKS[rank], rank: rank, value: value };
+//   },
+
+//   getCombinations(arr, k) {
+//     const result = [];
+//     function combo(startIndex, currentCombo) {
+//       if (currentCombo.length === k) {
+//         result.push([...currentCombo]);
+//         return;
+//       }
+//       if (startIndex === arr.length) return;
+//       currentCombo.push(arr[startIndex]);
+//       combo(startIndex + 1, currentCombo);
+//       currentCombo.pop();
+//       combo(startIndex + 1, currentCombo);
+//     }
+//     combo(0, []);
+//     return result;
+//   },
+
+//   getHandValue(sortedRanks) { // Convert sorted ranks to a single numeric value for comparison
+//     return sortedRanks.reduce((acc, rank, i) => acc + rank * Math.pow(14, 4 - i), 0);
+//   }
+// };
+
+// const OddsCalculator = {
+//   DECK: RANKS.flatMap(r => Object.keys(SUITS).map(s => r + s)),
+
+//   calculateOuts(holeCards, communityCards) {
+//     const myCards = holeCards.concat(communityCards);
+//     const knownCards = new Set(myCards);
+//     const remainingDeck = this.DECK.filter(c => !knownCards.has(c));
+
+//     let outCount = 0;
+//     const currentEval = HandEvaluator.evaluate(myCards);
+
+//     for (const potentialCard of remainingDeck) {
+//       const newHand = myCards.concat([potentialCard]);
+//       const newEval = HandEvaluator.evaluate(newHand);
+//       if (newEval.rank > currentEval.rank || (newEval.rank === currentEval.rank && newEval.value > currentEval.value)) {
+//         outCount++;
+//       }
+//     }
+//     return { count: outCount };
+//   }
+// };
+
+// // ===================================
+// //             APP LOGIC
+// // ===================================
+
+// function handleLobbyMessage(event) {
+//   const data = JSON.parse(event.data);
+//   console.log("Lobby message received:", data);
+//   if (data.type === 'game_list') {
+//     ui.updateLobby(data.games);
+//   }
+// }
+
+// function handleGameMessage(event) {
+//   const data = JSON.parse(event.data);
+//   if (data.type === 'error') {
+//     ui.showModal('Error', `<p>${data.message}</p>`);
+//   } else if (data.type === 'game_state') {
+//     ui.updateGameState(data.state);
+//   } else if (data.type === 'game_over') {
+//     ui.showModal('Game Over', `<p>${data.message}</p>`, [{
+//       text: "Back to Lobby", handler: () => {
+//         leaveGame();
+//         ui.hideModal();
+//       }
+//     }]);
+//   }
+// }
+
+// function joinGame(gameId) {
+//   state.currentGameId = gameId;
+//   const url = `${WS_BASE_URL}/ws/game/${gameId}?token=${state.token}`;
+//   gameSocket.connect(url, handleGameMessage);
+//   ui.switchView('game-view');
+// }
+
+// function leaveGame() {
+//   gameSocket.close();
+//   state.currentGameId = null;
+//   initLobby(); // Re-initialize lobby view
+// }
+
+// function sendPlayerAction(action, amount = 0) {
+//   gameSocket.sendMessage({
+//     type: 'game_action',
+//     action: {
+//       type: action,
+//       amount: amount,
+//     }
+//   });
+// }
+
+// // Event Listeners Setup
+// function setupEventListeners() {
+//   document.body.addEventListener('submit', async (e) => {
+//     e.preventDefault();
+//     if (e.target.id === 'login-form') {
+//       const username = document.getElementById('login-username').value;
+//       const password = document.getElementById('login-password').value;
+//       try {
+//         const data = await api.login(username, password);
+//         state.login(data.access_token, data.user);
+//         initLobby();
+//       } catch (error) {
+//         ui.showModal('Login Failed', `<p>${error.message}</p>`);
+//       }
+//     }
+//     if (e.target.id === 'register-form') {
+//       const username = document.getElementById('register-username').value;
+//       const password = document.getElementById('register-password').value;
+//       try {
+//         const data = await api.register(username, password);
+//         ui.showModal('Registration Successful', `<p>Welcome, ${data.username}! Please log in.</p>`);
+//         ui.renderLogin();
+//         setupAuthSwitchListeners();
+//       } catch (error) {
+//         ui.showModal('Registration Failed', `<p>${error.message}</p>`);
+//       }
+//     }
+//   });
+
+//   document.body.addEventListener('click', (e) => {
+//     const target = e.target;
+
+//     // Auth view switching
+//     if (target.id === 'show-register') { e.preventDefault(); ui.renderRegister(); setupAuthSwitchListeners(); }
+//     if (target.id === 'show-login') { e.preventDefault(); ui.renderLogin(); setupAuthSwitchListeners(); }
+
+//     // Lobby actions
+//     if (target.id === 'create-game-btn') ui.showCreateGameModal();
+//     if (target.id === 'logout-btn') {
+//       state.logout();
+//       lobbySocket.close();
+//       gameSocket.close();
+//       initAuth();
+//     }
+//     if (target.id === 'profile-btn') {
+//       api.getProfile().then(user => ui.showProfile(user));
+//     }
+//     if (target.id === 'close-profile-btn') ui.hideProfile();
+
+//     // Joining a game
+//     if (target.matches('.join-game-btn')) {
+//       const gameId = target.dataset.gameId;
+//       joinGame(gameId);
+//     }
+
+//     // In-game actions
+//     if (target.id === 'leave-game-btn') leaveGame();
+
+//     if (state.currentView === 'game-view') {
+//       if (target.id === 'fold-btn') sendPlayerAction('fold');
+//       if (target.id === 'check-call-btn') {
+//         const action = target.textContent.trim().toLowerCase().startsWith('check') ? 'check' : 'call';
+//         sendPlayerAction(action);
+//       }
+//       if (target.id === 'raise-btn') {
+//         const amount = document.getElementById('raise-amount').value;
+//         sendPlayerAction('raise', parseInt(amount));
+//       }
+//       if (target.id === 'all-in-btn') {
+//         sendPlayerAction('all_in');
+//       }
+//     }
+//   });
+// }
+
+// function setupAuthSwitchListeners() {
+//   document.getElementById('show-register').addEventListener('click', (e) => { e.preventDefault(); ui.renderRegister(); setupAuthSwitchListeners(); });
+//   document.getElementById('show-login').addEventListener('click', (e) => { e.preventDefault(); ui.renderLogin(); setupAuthSwitchListeners(); });
+// }
+
+// // Initializer functions
+// function initAuth() {
+//   ui.switchView('auth-view');
+//   ui.renderLogin();
+//   setupAuthSwitchListeners();
+// }
+
+// function initLobby() {
+//   ui.switchView('lobby-view');
+//   const url = `${WS_BASE_URL}/ws/lobby?token=${state.token}`;
+//   lobbySocket.connect(url, handleLobbyMessage);
+// }
+
+// // ===================================
+// //           INITIALIZATION
+// // ===================================
+// function main() {
+//   if (state.token) {
+//     initLobby();
+//   } else {
+//     initAuth();
+//   }
+//   setupEventListeners();
+// }
+
+// main();
