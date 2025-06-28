@@ -8,6 +8,7 @@ import uuid as py_uuid
 import asyncio
 from typing import List
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import selectinload
 
 from database import engine, get_db, Base
 from models import User, Game, GamePlayer, GameStatus
@@ -55,74 +56,7 @@ async def register_user(user_in: UserCreate, db: AsyncSession = Depends(get_db))
     return new_user
 
 @app.post("/api/login", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordBearer = Depends(), db: AsyncSession = Depends(get_db)):
-    # Note: FastAPI uses form data for OAuth2, so we need to manually get username/password
-    # This is a workaround for the example since frontend sends JSON. A real app would use `OAuth2PasswordRequestForm`.
-    # For simplicity, we assume frontend will call this correctly, or we adjust the client.
-    # The client-side code sends JSON, so we will use a different dependency approach.
-    # The request body will be parsed as a JSON object of `LoginRequest` instead.
-    # So we'll ignore `form_data` and read body.
-    
-    # Correct way using JSON body:
-    from pydantic import BaseModel
-    class LoginRequest(BaseModel):
-        username: str
-        password: str
-
-    # This part is a bit of a hack to work with the provided structure. Normally you'd use form data.
-    async def get_login_request(request: LoginRequest):
-        return request
-    
-    # We will simulate the form data dependency by creating it from a JSON body.
-    # A cleaner way is to use `OAuth2PasswordRequestForm` and send form data from client.
-    # The request body will be parsed as a JSON object of `LoginRequest` instead.
-    # So we'll ignore `form_data` and read body.
-    
-    # Correct way using JSON body:
-    # async def login_for_access_token(user_credentials: UserCreate, db: AsyncSession = Depends(get_db)):
-    # user = await get_user(db, user_credentials.username)
-    # ...
-    # This is a common point of confusion. We'll stick to the JSON approach.
-    
-    # Let's adjust the login function to accept a simple Pydantic model.
-    # @app.post("/api/login", response_model=Token)
-    # async def login_for_access_token(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    # This is a re-declaration, so we will modify the existing one.
-    # Let's assume the client sends x-www-form-urlencoded
-    # The frontend code sends JSON, so we must change the endpoint to handle that.
-    
-    # Let's redefine the endpoint properly to accept JSON
-    # The following is pseudo-code for what should be in a separate endpoint
-    # to avoid confusion with the default OAuth2 form dependency.
-    # We will just assume username/password are in the body.
-    # The following line is what should happen:
-    # user = await authenticate_user(db, form_data.username, form_data.password)
-    # Since we can't get form data easily from the JSON client, we'll cheat.
-    
-    # We will assume a JSON body is sent, and we'll ignore the `form_data` dependency.
-    # This is not best practice but works for this self-contained example.
-    # The client is sending JSON, so the server must expect JSON.
-    # Let's fix the endpoint signature
-    # @app.post("/api/login", response_model=Token)
-    # async def login_for_access_token(user_creds: UserCreate, db: AsyncSession = Depends(get_db)):
-    # We can't redefine the function. So let's work within the existing one.
-    
-    # This endpoint is tricky. Let's make it simple. FastAPI's OAuth2PasswordBearer expects a form.
-    # Let's just create a new login endpoint that takes JSON.
-    
-    # Let's just assume the endpoint is called with JSON body, and we manually extract it.
-    # The provided frontend sends JSON.
-    # The code here will be a bit of a placeholder to show intent.
-    
-    raise HTTPException(status_code=501, detail="Login endpoint needs to be adjusted for JSON or form data. See comments.")
-    # A functional version that expects JSON would look like this:
-    # @app.post("/api/login", response_model=Token)
-    # async def login_json(user_creds: UserCreate, db: AsyncSession = Depends(get_db)):
-    #   ...
-    # We will add THIS endpoint instead.
-    
-@app.post("/api/login_json", response_model=Token, include_in_schema=False) # Helper for our JSON client
-async def login_json(user_creds: UserCreate, db: AsyncSession = Depends(get_db)):
+async def login_for_access_token(user_creds: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await get_user(db, user_creds.username)
     if not user or not verify_password(user_creds.password, user.password_hash):
         raise HTTPException(
@@ -133,7 +67,6 @@ async def login_json(user_creds: UserCreate, db: AsyncSession = Depends(get_db))
     user_profile = UserProfile.from_orm(user)
     return {"access_token": access_token, "token_type": "bearer", "user": user_profile}
 
-
 @app.get("/api/profile/{user_id}", response_model=UserProfile)
 async def read_user_profile(user_id: py_uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if user_id != current_user.id:
@@ -142,7 +75,11 @@ async def read_user_profile(user_id: py_uuid.UUID, current_user: User = Depends(
 
 @app.get("/api/games", response_model=List[GameInfo])
 async def get_active_games(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Game).where(Game.status == GameStatus.WAITING))
+    result = await db.execute(
+        select(Game)
+        .where(Game.status == GameStatus.WAITING)
+        .options(selectinload(Game.players))
+    )
     games = result.scalars().all()
     # Manually construct GameInfo to include player_count
     game_infos = []
@@ -169,7 +106,16 @@ async def create_new_game(game_in: GameCreate, current_user: User = Depends(get_
     
     # Automatically broadcast to lobby
     games = await get_active_games(db)
-    await lobby_manager.broadcast({"type": "game_list", "games": [g.dict() for g in games]}, None) # HACK: Broadcasting to all in lobby
+    # Convert GameInfo objects to JSON-serializable dictionaries
+    games_dict = []
+    for game in games:
+        games_dict.append({
+            "id": str(game.id),
+            "max_players": game.max_players,
+            "buy_in": game.buy_in,
+            "player_count": game.player_count
+        })
+    await lobby_manager.broadcast({"type": "game_list", "games": games_dict}, None)
     
     return GameInfo(
         id=new_game.id,
@@ -194,7 +140,16 @@ async def websocket_lobby_endpoint(websocket: WebSocket, token: str, db: AsyncSe
     try:
         # Send initial game list
         games = await get_active_games(db)
-        await websocket.send_json({"type": "game_list", "games": [g.dict() for g in games]})
+        # Convert GameInfo objects to JSON-serializable dictionaries
+        games_dict = []
+        for game in games:
+            games_dict.append({
+                "id": str(game.id),
+                "max_players": game.max_players,
+                "buy_in": game.buy_in,
+                "player_count": game.player_count
+            })
+        await websocket.send_json({"type": "game_list", "games": games_dict})
         
         while True:
             # Lobby is mostly for receiving updates, so we just wait
@@ -277,16 +232,3 @@ async def websocket_game_endpoint(websocket: WebSocket, game_id: py_uuid.UUID, t
                 await advance_game_state(game_id, db)
             else:
                 await broadcast_game_state(game_id, db)
-# A corrected login endpoint that expects JSON
-@app.post("/api/login", response_model=Token)
-async def login_via_json(user_creds: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Handles user login with JSON username/password."""
-    user = await get_user(db, user_creds.username)
-    if not user or not verify_password(user_creds.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-        )
-    access_token = create_access_token(data={"sub": user.username})
-    user_profile = UserProfile.from_orm(user)
-    return {"access_token": access_token, "token_type": "bearer", "user": user_profile}

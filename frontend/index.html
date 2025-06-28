@@ -342,6 +342,7 @@
                     <h2 class="text-2xl font-semibold text-center mb-4">Register</h2>
                     <form id="register-form">
                         <input id="register-username" type="text" placeholder="Username" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input id="register-email" type="email" placeholder="Email" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <input id="register-password" type="password" placeholder="Password" required class="w-full p-3 mb-4 bg-zinc-800 border border-zinc-700 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded">Register</button>
                     </form>
@@ -605,10 +606,10 @@
         return response.json();
       }
 
-      async register(username, password) {
+      async register(username, password, email) {
         return this._fetch('/api/register', {
           method: 'POST',
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, email }),
         });
       }
 
@@ -809,9 +810,10 @@
         }
         if (e.target.id === 'register-form') {
           const username = document.getElementById('register-username').value;
+          const email = document.getElementById('register-email').value;
           const password = document.getElementById('register-password').value;
           try {
-            const data = await api.register(username, password);
+            const data = await api.register(username, password, email);
             ui.showModal('Registration Successful', `<p>Welcome, ${data.username}! Please log in.</p>`);
             ui.renderLogin();
           } catch (error) {

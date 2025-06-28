@@ -13,7 +13,7 @@ class UserBase(BaseModel):
     avatar_url: str
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserProfile(UserBase):
     current_chips: int
@@ -67,7 +67,7 @@ class GameInfo(BaseModel):
     player_count: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # WebSocket Message Schemas
 class PlayerAction(BaseModel):
